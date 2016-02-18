@@ -6,12 +6,14 @@
 
 import sys
 import time
+import getopt
 
 
 def execute(filename):
     f = open(filename, "r")
-    evaluate(f.read())
+    ans = evaluate(f.read())
     f.close()
+    return ans
 
 
 def evaluate(code, timeout=5):
@@ -29,9 +31,8 @@ def evaluate(code, timeout=5):
     output = ""
     code = cleanup(list(code))
     bracemap = buildbracemap(code)
-
     cells, codeptr, cellptr = [0], 0, 0
-
+    
     start = time.time()
     while (time.time() - start < timeout) and (codeptr < len(code)):
         command = code[codeptr]
@@ -54,7 +55,6 @@ def evaluate(code, timeout=5):
         ##if command == ",": cells[cellptr] = ord(getch())
 
         codeptr += 1
-
     return output
 
 
@@ -73,3 +73,33 @@ def buildbracemap(code):
             bracemap[start] = position
             bracemap[position] = start
     return bracemap
+
+
+def main(argv):
+    # file I/O
+    inputfile = ''
+    outputfile = ''
+    try:
+        opts, args = getopt.getopt(argv,"hi:o:",["ifile=","ofile="])
+    except getopt.GetoptError:
+        print 'test.py -i <inputfile> -o <outputfile>'
+        sys.exit(2)
+    for opt, arg in opts:
+        if opt == '-h':
+            print 'test.py -i <inputfile> -o <outputfile>'
+            sys.exit()
+        elif opt in ("-i", "--ifile"):
+            inputfile = arg
+        elif opt in ("-o", "--ofile"):
+            outputfile = arg
+    print 'Input file is "', inputfile
+    print 'Output file is "', outputfile
+    
+    # print result
+    genetic_code = execute(inputfile)
+    print(genetic_code)
+
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
