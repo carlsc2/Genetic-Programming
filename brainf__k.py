@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Brainfuck Interpreter
+# Brainf__k Interpreter
 # Copyright 2011 Sebastian Kaspari
 #
 
@@ -18,9 +18,9 @@ def execute(filename):
 
 def evaluate(code, timeout=5):
     """
-    Modified brainfuck interpreter based on https://github.com/pocmo/Python-Brainfuck/blob/master/brainfuck.py
+    Modified brainf__k interpreter based on https://github.com/pocmo/Python-Brainfuck/blob/master/brainfuck.py
 
-    Executes string of brainfuck code and returns a string of output
+    Executes string of brainf__k code and returns a string of output
 
     Has a timeout function to limit execution time.
 
