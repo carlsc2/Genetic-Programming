@@ -1,11 +1,10 @@
 """
 gptest.py
 
-A test of genetic programming with python and brainfuck.
-
+A test of genetic programming with python and brainf__k.
 """
 
-import brainfuck
+import brainf__k
 from genalg import GeneticAlgorithm
 
 def edit_distance(s1, s2):
@@ -22,12 +21,12 @@ def edit_distance(s1, s2):
 
     return tbl[i,j]
 
-target_string = "marmelade"
+target_string = "hello_world"
 
 def evaluate(chromo):
     #try to evaluate the code
     try:
-        result = brainfuck.evaluate(chromo.s,.1)
+        result = brainf__k.evaluate(chromo.s,.1)
     except:
         result = ''
 
