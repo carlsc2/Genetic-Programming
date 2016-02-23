@@ -274,5 +274,5 @@ class GeneticAlgorithm():
         if(output_string==''):
             print('Output did not produce a string.')
         else:
-            print("Output of best result, truncated:%s") % output_string[:100]
+            print("Output of best result, truncated:%s" % output_string[:100])
 
