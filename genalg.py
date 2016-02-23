@@ -28,7 +28,8 @@ class GeneticAlgorithm():
                  eval_func,
                  use_elitism=False,
                  positive_fitness=True,
-                 selection_function="roulette"):
+                 selection_function="roulette",
+                 chromosome_size=-1):
         """
         genetic_alphabet (list<string>):
             This is a list of all chars in the genetic alphabet used to define
@@ -53,6 +54,16 @@ class GeneticAlgorithm():
                 'roulette' => roulette wheel sampling
                 'tournament' => tournament selection
 
+            Note: For tournament selection the default tournament size
+            is 2. To use a different size, use 'tournament_x' where x
+            is the tournament size.
+
+        chromosome_size (int):
+            If set to -1, chromosomes can change in size
+            via mutation.
+            Otherwise, the chromosomes will be limited to
+            this size and will only be mutated via substitution.
+
         """
         self.genetic_alphabet = genetic_alphabet
         self.crossover_rate = .9
@@ -60,11 +71,17 @@ class GeneticAlgorithm():
         self.evaluate = eval_func
         self.use_elitism = use_elitism
         self.positive_fitness = positive_fitness
+        self.chromosome_size = chromosome_size
 
         if selection_function == 'roulette':
             self.selection_function = self.roulette_selection
-        elif selection_function == 'tournament':
-            self.selection_function = self.tournament_selection
+        elif 'tournament' in selection_function:
+            tmp = selection_function.split("_")
+            if len(tmp) == 2:
+                k = int(tmp[-1]) #get tournament size
+                self.selection_function = lambda pop: self.tournament_selection(pop,k)
+            else:
+                self.selection_function = self.tournament_selection
         else:
             print(("%s is not a supported selection function, "
                    "defaulting to roulette wheel sampling") % selection_function)
@@ -79,21 +96,26 @@ class GeneticAlgorithm():
             - substitution
         """
 
-        def insertion(x):
-            return random.choice(self.genetic_alphabet) + x
+        def choose_mutation():
+            def insertion(x):
+                return random.choice(self.genetic_alphabet) + x
 
-        def deletion(x):
-            return ""
+            def deletion(x):
+                return ""
 
-        def substitution(x):
-            return random.choice(self.genetic_alphabet)
+            def substitution(x):
+                return random.choice(self.genetic_alphabet)
 
-        options = {0: insertion, 1: deletion, 2: substitution}
+            if self.chromosome_size == -1:
+                options = {0: insertion, 1: deletion, 2: substitution}
+                return options[random.randint(0, 2)]
+            else:
+                return substitution
 
         ch = ""  # create new genes for chromo
         for i in chromo.s:
             if random.random() < self.mutation_rate:  # do mutation
-                ch += options[random.randint(0, 2)](i)
+                ch += choose_mutation()(i)
             else:  # add previous char
                 ch += i
 
@@ -178,8 +200,11 @@ class GeneticAlgorithm():
         chromos = []
         for eachChromo in range(popSize):
             chromo = Chromosome()
-            # arbitrary starting chromosome size
-            numgenes = random.randint(5, 50)
+            if self.chromosome_size == -1:
+                # arbitrary range of starting chromosome size
+                numgenes = random.randint(5, 50)
+            else:
+                numgenes = self.chromosome_size
             for bit in range(numgenes):
                 chromo.s += random.choice(self.genetic_alphabet)
             chromos.append(chromo)
