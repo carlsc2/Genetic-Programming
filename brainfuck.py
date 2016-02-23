@@ -9,11 +9,15 @@ import time
 import getopt
 
 
-def execute(filename):
-    f = open(filename, "r")
-    ans = evaluate(f.read())
-    f.close()
-    return ans
+def execute(input_file,use_string=0):
+    if (use_string==1):
+        ans = evaluate(input_file)
+        return ans
+    else:
+        f = open(input_file, "r")
+        ans = evaluate(f.read())
+        f.close()
+        return ans
 
 
 def evaluate(code, timeout=5):
@@ -79,8 +83,9 @@ def main(argv):
     # file I/O
     inputfile = ''
     outputfile = ''
+    input_code = ''
     try:
-        opts, args = getopt.getopt(argv,"hi:o:",["ifile=","ofile="])
+        opts, args = getopt.getopt(argv,"hs:i:o:",["ifile=","ofile="])
     except getopt.GetoptError:
         print('test.py -i <inputfile> -o <outputfile>')
         sys.exit(2)
@@ -90,13 +95,20 @@ def main(argv):
             sys.exit()
         elif opt in ("-i", "--ifile"):
             inputfile = arg
+            print('Input file is %s' % inputfile)
         elif opt in ("-o", "--ofile"):
             outputfile = arg
-    print('Input file is "', inputfile)
-    print('Output file is "', outputfile)
+            print('Output file is %s' % outputfile)
+        elif opt == '-s':
+            input_code = arg
+    
+    
 
     # print result
-    genetic_code = execute(inputfile)
+    if(input_code!=''):
+        genetic_code = execute(input_code,1)
+    else:
+        genetic_code = execute(inputfile)
     print(genetic_code)
 
 
