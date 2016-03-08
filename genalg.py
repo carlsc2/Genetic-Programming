@@ -6,6 +6,7 @@ Contains functionality for multi-purpose genetic algorithm.
 """
 
 import random
+import brainfuck
 
 
 class Chromosome:
@@ -288,3 +289,9 @@ class GeneticAlgorithm():
         # sort final population by fitness
         print("Best result:\n\tchromosome: %s\n\tfitness: %.5f" %
               (best.s, best.fitness))
+        output_string = brainfuck.execute(best.s,1)
+        if(output_string==''):
+            print('Output did not produce a string.')
+        else:
+            print("Output of best result, truncated:%s" % output_string[:100])
+
