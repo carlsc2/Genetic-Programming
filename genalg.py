@@ -218,13 +218,15 @@ class GeneticAlgorithm():
             chromos.append(self.mutate(Chromosome(seed)))
         return chromos
 
-    def run(self, max_iterations=1000, population_size=100, seed=None):
+    def run(self, max_iterations=1000, population_size=100, seed=None, fitness_threshold=None, max_fitness=None):
         """Run the genetic algorithm
 
         max_iterations is the number of generations to run
         population_size is the number of chromosomes per population
         seed, if specified, will create the initial population
-        from an existing gene
+        from an existing gene, fitness_threshold will discard anything
+        with worse fitness than the threshold (so as not to pass down genes)
+        max_fitness, if set, will break if that fitness is reached
         """
         def iterate_pop(pop):
             # iterate the current population
@@ -234,6 +236,18 @@ class GeneticAlgorithm():
             # elitism
             if self.use_elitism:  # use 5% of pop for elitism
                 newpop.extend(pop[:int(population_size / 20)])
+            if fitness_threshold is not None:
+                for chromo in pop:
+                    if self.positive_fitness and chromo.fitness < fitness_threshold:
+                        pop.remove(chromo)
+                    elif not self.positive_fitness and chromo.fitness > fitness_threshold:
+                        pop.remove(chromo)
+
+            if len(newpop) == 0:
+                print("Population extinct. Stopping.")
+                return
+
+
             while len(newpop) < population_size:
                 ch1 = self.selection_function(pop)
                 ch2 = self.selection_function(pop)
@@ -243,24 +257,29 @@ class GeneticAlgorithm():
                 newpop.append(ch2)
             return newpop
 
+        # initialize population
         if seed:
-            pop = self.generate_seeded_population(
-                population_size, seed)  # initialize population
+            pop = self.generate_seeded_population(population_size, seed)
         else:
-            pop = self.generate_population(
-                population_size)  # initialize population
+            pop = self.generate_population(population_size)
 
         best = Chromosome()
         for i in range(max_iterations):
             # assign fitness values to all chromosomes
             for chromosome in pop:
                 self.evaluate(chromosome)
-
             avgf = sum([chromo.fitness for chromo in pop]) / len(pop)
             # sort population by fitness
             pop = sorted(pop, key=lambda x: x.fitness,
                          reverse=self.positive_fitness)
             best = pop[0]
+
+            if max_fitness != None:
+                if self.positive_fitness and best.fitness >= max_fitness:
+                    break
+                elif not self.positive_fitness and best.fitness <= max_fitness:
+                    break
+
             print("Generation %d: Max fitness: %.5f Average Fitness: %.5f" %
                   (i + 1, best.fitness, avgf))
 
@@ -268,7 +287,7 @@ class GeneticAlgorithm():
             pop = iterate_pop(pop)
 
         # sort final population by fitness
-        print("Best result:\n chromosome: %s \n fitness: %.5f" %
+        print("Best result:\n\tchromosome: %s\n\tfitness: %.5f" %
               (best.s, best.fitness))
         output_string = brainfuck.execute(best.s,1)
         if(output_string==''):
