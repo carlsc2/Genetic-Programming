@@ -143,17 +143,16 @@ class GeneticAlgorithm():
                 return random.choice(self.genetic_alphabet)
 
             if self.chromosome_size == -1:
-                options = {0: insertion, 1: deletion, 2: substitution}
-                return options[random.randint(0, 2)]
+                return random.choice((insertion,deletion,substitution))
             else:
                 return substitution
 
-        ch = ""  # create new genes for chromo
-        for i in chromo.s:
-            if random.random() < self.mutation_rate:  # do mutation
-                ch += choose_mutation()(i)
-            else:  # add previous char
-                ch += i
+        ch = "" # create new genes for chromo
+        for gene in chromo.s:
+            if random.random() < self.mutation_rate: # do mutation
+                ch += choose_mutation()(gene)
+            else:
+                ch += gene
 
         return Chromosome(ch)
 
@@ -170,9 +169,7 @@ class GeneticAlgorithm():
         r = random.random()
         r1 = int(len(ch1) * r)
         r2 = int(len(ch2) * r)
-        a = Chromosome(ch1[:r1] + ch2[r2:])
-        b = Chromosome(ch2[:r2] + ch1[r1:])
-        return a, b
+        return Chromosome(ch1[:r1] + ch2[r2:]), Chromosome(ch2[:r2] + ch1[r1:])
 
     def uniform_crossover(self, ch1, ch2, mixing_ratio=.5):
         """Randomly partition the chromosomes and swap their partitions
@@ -180,37 +177,36 @@ class GeneticAlgorithm():
         The chromosomes can be different sizes; it is ratio based,
 
         """
-
         ch1 = ch1.s
         ch2 = ch2.s
 
-        def partition(l, ix, tlen):
-            prev = 0
-            out = []
-            for x in ix:
-                tmp = int(tlen*x)
-                out.append(l[prev:tmp])
-                prev = tmp
-            out.append(l[prev:])
-            return out
-
-        l1 = len(ch1)
-        l2 = len(ch2)
-        c = int(min(l1,l2)*mixing_ratio)
-        crosspoints = sorted(random.random() for x in range(c))
-
-        p1 = partition(ch1,crosspoints,l1)
-        p2 = partition(ch2,crosspoints,l2)
-
-        for i in range(c+1):
+        len1 = len(ch1)
+        len2 = len(ch2)
+        crosspoints = sorted([random.random() for x in range(int(min(len1,len2)*mixing_ratio))])
+        prev1 = prev2 = i = 0
+        out1 = ""
+        out2 = ""
+        for i,x in enumerate(crosspoints):
+            tmp1 = int(len1*x)
+            tmp2 = int(len2*x)
             if i&1:
-                p1[i],p2[i] = p2[i],p1[i]
+                out1 += ch1[prev1:tmp1]
+                out2 += ch2[prev2:tmp2]
+            else:
+                out1 += ch2[prev2:tmp2]
+                out2 += ch1[prev1:tmp1]
+            prev1 = tmp1
+            prev2 = tmp2
+        if (i+1)&1:
+            out1 += ch1[prev1:]
+            out2 += ch2[prev2:]
+        else:
+            out1 += ch2[prev2:]
+            out2 += ch1[prev1:]
 
-        a = Chromosome("".join(p1))
-        b = Chromosome("".join(p2))
-        return a,b
+        return Chromosome(out1), Chromosome(out2)
 
-    def delimited_crossover(self,ch1, ch2, delimiter="#"):
+    def delimited_crossover(self, ch1, ch2, delimiter="#"):
         """Partition the chromosomes and swap their partitions based on delimiter
 
         The chromosomes can be different sizes; it is ratio based,
@@ -220,13 +216,18 @@ class GeneticAlgorithm():
         p1 = ch1.s.split(delimiter)
         p2 = ch2.s.split(delimiter)
 
-        for i in range(min(len(p1),len(p2))):
-            if not i&1:
-                p1[i],p2[i] = p2[i],p1[i]
+        o1 = ""
+        o2 = ""
 
-        a = Chromosome("".join(p1))
-        b = Chromosome("".join(p2))
-        return a,b
+        for i in range(min(len(p1),len(p2))):
+            if i&1:
+                o1 += p1[i]
+                o2 += p2[i]
+            else:
+                o1 += p2[i]
+                o2 += p1[i]
+
+        return Chromosome(o1),Chromosome(o2)
 
 
 
