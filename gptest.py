@@ -4,7 +4,6 @@ gptest.py
 A test of genetic programming with python and brainfuck.
 
 """
-##import brainfuck
 import cbrainfuck
 from genalg import GeneticAlgorithm
 
@@ -12,10 +11,7 @@ def evaluate(chromo):
     #try to evaluate the code
     target_string='marmelade'
     try:
-        ##result = brainfuck.evaluate(chromo.s,timeout=.01)
-        print(chromo.s)
-        result = cbrainfuck.evaluate(chromo.s,.01)
-        print(result)
+        result = cbrainfuck.evaluate(chromo.s,.005)
         if len(result) != 0:
             f = 0
             for i in range(max(len(target_string),len(result))):

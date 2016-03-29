@@ -14,48 +14,64 @@ struct cell{
 typedef struct cell cell;
 
 #define OUTPUT_LENGTH 4096
+#define MAX_DEPTH 255
 
 cell *ip, *mp;
 char* input_buffer;
-unsigned int ibl;
-unsigned int ri;
-unsigned int oi;
+int ibl;
+int ri;
+int oi;
 char output_buffer[OUTPUT_LENGTH] = { '\0' };
-double timeout = 5;
+double timeout;
+int timed_out;
 clock_t start;
+int depth;
 
 void run(){
-	while(ip){
-		if(clock() - start > timeout) return;
+	if(depth >= MAX_DEPTH) return;
+	while(ip && mp && ip->v){
 		int lev=1;
 		if( ip->v == '+' ) ++mp->v;
 		else if( ip->v == '-' ) --mp->v;
-		else if( ip->v == '.' && oi < OUTPUT_LENGTH) output_buffer[oi++] = (mp->v);
+		else if( ip->v == '.' && oi < OUTPUT_LENGTH) output_buffer[oi++] = mp->v;
 		else if( ip->v == ',' && ri < ibl) mp->v = input_buffer[ri++];
-		else if( ip->v == '<' ) mp=mp->p;
+		else if( ip->v == '<' ) mp = mp->p;
 		else if( ip->v == '>' ){
 			if( !mp->n ){
 				cell m; m.p=mp; 
 				m.n=0; m.v=0;
 				mp->n=&m; mp=&m;
 				ip=ip->n;
+				depth++;
 				run();
+				depth--;
 				return;
 			}
 			mp=mp->n;
 		}
-		else if( ip->v == '[' && !mp->v )
-		while(lev){ ip=ip->n; lev-=(ip->v==']')-(ip->v=='['); }
-		else if( ip->v == ']' && mp->v )
-		while(lev){ ip=ip->p; lev+=(ip->v==']')-(ip->v=='['); }
-
+		else if( ip->v == '[' && !mp->v ){//skip if not zero
+			while(lev && ip->n){
+				ip=ip->n;
+				lev-=(ip->v==']')-(ip->v=='[');
+			}
+		}
+		else if( ip->v == ']' && mp->v ){
+			if(clock() - start > timeout){//timeout can only occur with loops right?
+				timed_out = 1;
+				return;
+			}
+			while(lev && ip->p){
+				ip=ip->p;
+				lev+=(ip->v==']')-(ip->v=='[');
+			}
+		}
 		ip=ip->n;
 	}
 }
 
 void readp(cell *p){
 	int cmd = input_buffer[ri++];
-	if( cmd == '!' || cmd<0 ){
+	if( cmd == '!' || cmd<=0 || ri > ibl ){
 		cell m; m.p=m.n=0;
 		m.v=0; mp=&m;
 		start = clock();
@@ -71,63 +87,38 @@ void readp(cell *p){
 }
 
 static PyObject* evaluate(PyObject* self, PyObject *args){
-	ri = 0;
-	oi = 0;
+	ibl = ri = oi = timed_out = 0;
 	if (!PyArg_ParseTuple(args, "s#|d", &input_buffer, &ibl, &timeout)) {
-      return NULL;
+	  return NULL;
 	}
 	timeout = timeout * 1000; //convert to seconds
-	readp(0);
+	if(ibl > 0) readp(0); //ignore empty code
+	if(timed_out){
+		return Py_BuildValue("s","");
+	}
 	return PyUnicode_DecodeLatin1(output_buffer, oi, NULL);
 }
 
 static PyMethodDef cbrainfuck_methods[] = {
-    {"evaluate", (PyCFunction)evaluate, METH_VARARGS, NULL},
-    {NULL, NULL, 0, NULL}
+	{"evaluate", (PyCFunction)evaluate, METH_VARARGS, NULL},
+	{NULL, NULL}
 };
-
-struct module_state {
-    PyObject *error;
-};
-
-#define GETSTATE(m) ((struct module_state*)PyModule_GetState(m))
-static struct module_state _state;
-
-static int cbrainfuck_traverse(PyObject *m, visitproc visit, void *arg) {
-    Py_VISIT(GETSTATE(m)->error);
-    return 0;
-}
-
-static int cbrainfuck_clear(PyObject *m) {
-    Py_CLEAR(GETSTATE(m)->error);
-    return 0;
-}
 
 static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT,
-        "cbrainfuck",
-        NULL,
-        sizeof(struct module_state),
-        cbrainfuck_methods,
-        NULL,
-        cbrainfuck_traverse,
-        cbrainfuck_clear,
-        NULL
+	PyModuleDef_HEAD_INIT,
+	"cbrainfuck",
+	NULL,
+	(Py_ssize_t)0,
+	cbrainfuck_methods,
+	NULL,
+	NULL,
+	NULL,
+	NULL
 };
 
 PyObject* PyInit_cbrainfuck(void){
-
-    PyObject *module = PyModule_Create(&moduledef);
-
-    if (module == NULL)
-        return NULL;
-    struct module_state *st = GETSTATE(module);
-
-    st->error = PyErr_NewException("cbrainfuck.Error", NULL, NULL);
-    if (st->error == NULL) {
-        Py_DECREF(module);
-        return NULL;
-    }
-    return module;
-
+	PyObject* module = PyModule_Create(&moduledef);
+	if (module == NULL)
+		return NULL;
+	return module;
 }
