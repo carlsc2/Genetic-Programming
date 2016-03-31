@@ -6,6 +6,9 @@ Contains functionality for multi-purpose genetic algorithm.
 """
 
 import random
+import cbrainfuck
+import time
+import itertools
 
 
 class Chromosome:
@@ -28,7 +31,9 @@ class GeneticAlgorithm():
                  eval_func,
                  use_elitism=False,
                  positive_fitness=True,
-                 selection_function="roulette"):
+                 selection_function="roulette",
+                 crossover_function="one_point",
+                 chromosome_size=-1):
         """
         genetic_alphabet (list<string>):
             This is a list of all chars in the genetic alphabet used to define
@@ -53,6 +58,32 @@ class GeneticAlgorithm():
                 'roulette' => roulette wheel sampling
                 'tournament' => tournament selection
 
+            Note: For tournament selection the default tournament size
+            is 2. To use a different size, use 'tournament_x' where x
+            is the tournament size.
+
+        crossover_function (string):
+            Determines which crossover function to use.
+            Currently supported:
+                'one_point' => perform crossover at one point
+                'uniform' => perform crossover at multiple points,
+                             based on mixing ratio. Use uniform_x
+                             to define mixing ratio (0 <= x <= 1)
+                'delimited' => delimiter-based, will do crossover
+                               on partitions, in order. Delimiter must
+                               be part of the genetic alphabet. Use
+                               delimited_x to specify x as delimiter.
+
+        chromosome_size (int):
+            If set to -1, chromosomes can change in size
+            via mutation.
+            Otherwise, the chromosomes will be limited to
+            this size and will only be mutated via substitution.
+
+        logfile(string):
+            If specified, data will be written to this file
+            for each generation.
+
         """
         self.genetic_alphabet = genetic_alphabet
         self.crossover_rate = .9
@@ -60,15 +91,37 @@ class GeneticAlgorithm():
         self.evaluate = eval_func
         self.use_elitism = use_elitism
         self.positive_fitness = positive_fitness
+        self.chromosome_size = chromosome_size
 
         if selection_function == 'roulette':
             self.selection_function = self.roulette_selection
-        elif selection_function == 'tournament':
-            self.selection_function = self.tournament_selection
+        elif 'tournament' in selection_function:
+            tmp = selection_function.split("_")
+            if len(tmp) == 2:
+                k = int(tmp[-1]) #get tournament size
+                self.selection_function = lambda pop: self.tournament_selection(pop,k)
+            else:
+                self.selection_function = self.tournament_selection
         else:
-            print(("%s is not a supported selection function, "
-                   "defaulting to roulette wheel sampling") % selection_function)
+            print((("%s is not a supported selection function, "
+                   "defaulting to roulette wheel sampling") % selection_function))
             self.selection_function = self.roulette_selection
+
+        if crossover_function == 'one_point':
+            self.crossover_function = self.one_point_crossover
+        elif 'uniform' in crossover_function:
+            tmp = crossover_function.split("_")
+            if len(tmp) == 2:
+                mr = float(tmp[-1]) #get mixing ratio
+                self.crossover_function = lambda ch1,ch2: self.uniform_crossover(ch1,ch2,mr)
+            else:
+                self.crossover_function = self.uniform_crossover
+        elif 'delimited' in crossover_function:
+            tmp = crossover_function.split("_")
+            if len(tmp) == 2:
+                self.crossover_function = lambda ch1,ch2: self.delimited_crossover(ch1,ch2,tmp[-1])
+            else:
+                self.crossover_function = self.delimited_crossover
 
     def mutate(self, chromo):
         """mutate a chromosome and return a new, mutated one
@@ -79,44 +132,103 @@ class GeneticAlgorithm():
             - substitution
         """
 
-        def insertion(x):
-            return random.choice(self.genetic_alphabet) + x
+        def choose_mutation():
+            def insertion(x):
+                return random.choice(self.genetic_alphabet) + x
 
-        def deletion(x):
-            return ""
+            def deletion(x):
+                return ""
 
-        def substitution(x):
-            return random.choice(self.genetic_alphabet)
+            def substitution(x):
+                return random.choice(self.genetic_alphabet)
 
-        options = {0: insertion, 1: deletion, 2: substitution}
+            if self.chromosome_size == -1:
+                options = {0: insertion, 1: deletion, 2: substitution}
+                return options[random.randint(0, 2)]
+            else:
+                return substitution
 
         ch = ""  # create new genes for chromo
         for i in chromo.s:
             if random.random() < self.mutation_rate:  # do mutation
-                ch += options[random.randint(0, 2)](i)
+                ch += choose_mutation()(i)
             else:  # add previous char
                 ch += i
 
         return Chromosome(ch)
 
-    def crossover(self, ch1, ch2):
-        """Perform genetic crossover between two chromosomes
-
+    def one_point_crossover(self, ch1, ch2):
+        """Perform one point crossover between two chromosomes
 
         The chromosomes can be different sizes; the crossover
         point is proportional to each.
 
         """
-        a = Chromosome()
-        b = Chromosome()
+
         ch1 = ch1.s
         ch2 = ch2.s
         r = random.random()
         r1 = int(len(ch1) * r)
         r2 = int(len(ch2) * r)
-        a.s = ch1[:r1] + ch2[r2:]
-        b.s = ch2[:r2] + ch1[r1:]
+        a = Chromosome(ch1[:r1] + ch2[r2:])
+        b = Chromosome(ch2[:r2] + ch1[r1:])
         return a, b
+
+    def uniform_crossover(self, ch1, ch2, mixing_ratio=.5):
+        """Randomly partition the chromosomes and swap their partitions
+
+        The chromosomes can be different sizes; it is ratio based,
+
+        """
+
+        ch1 = ch1.s
+        ch2 = ch2.s
+
+        def partition(l, ix, tlen):
+            prev = 0
+            out = []
+            for x in ix:
+                tmp = int(tlen*x)
+                out.append(l[prev:tmp])
+                prev = tmp
+            out.append(l[prev:])
+            return out
+
+        l1 = len(ch1)
+        l2 = len(ch2)
+        c = int(min(l1,l2)*mixing_ratio)
+        crosspoints = sorted(random.random() for x in range(c))
+
+        p1 = partition(ch1,crosspoints,l1)
+        p2 = partition(ch2,crosspoints,l2)
+
+        for i in range(c+1):
+            if i&1:
+                p1[i],p2[i] = p2[i],p1[i]
+
+        a = Chromosome("".join(p1))
+        b = Chromosome("".join(p2))
+        return a,b
+
+    def delimited_crossover(self,ch1, ch2, delimiter="#"):
+        """Partition the chromosomes and swap their partitions based on delimiter
+
+        The chromosomes can be different sizes; it is ratio based,
+
+        """
+
+        p1 = ch1.s.split(delimiter)
+        p2 = ch2.s.split(delimiter)
+
+        for i in range(min(len(p1),len(p2))):
+            if not i&1:
+                p1[i],p2[i] = p2[i],p1[i]
+
+        a = Chromosome("".join(p1))
+        b = Chromosome("".join(p2))
+        return a,b
+
+
 
     def roulette_selection(self, population):
         """Roulette wheel sampling
@@ -134,19 +246,17 @@ class GeneticAlgorithm():
                 return chromosome
         return population[0]
 
-    def tournament_selection(self, population, k=2):
+    def tournament_selection(self, population, k=4):
         """Tournament selection
 
         Randomly selects the most fit candidate from a tournament of size k.
         This works for both maximizing and minimizing fitnesses.
 
         """
-        best = None
+        best = random.choice(population)
         for i in range(k):
             chromo = random.choice(population)
-            if not best:
-                best = chromo
-            elif self.positive_fitness and chromo.fitness > best.fitness:
+            if self.positive_fitness and chromo.fitness > best.fitness:
                 best = chromo
             elif not self.positive_fitness and chromo.fitness < best.fitness:
                 best = chromo
@@ -156,7 +266,7 @@ class GeneticAlgorithm():
         """Perform crossover and mutation based on two chromosomes"""
         # rate dependent crossover of selected chromosomes
         if random.random() < self.crossover_rate:
-            newCh1, newCh2 = self.crossover(ch1, ch2)
+            newCh1, newCh2 = self.crossover_function(ch1, ch2)
         else:
             newCh1, newCh2 = ch1, ch2
 
@@ -178,8 +288,11 @@ class GeneticAlgorithm():
         chromos = []
         for eachChromo in range(popSize):
             chromo = Chromosome()
-            # arbitrary starting chromosome size
-            numgenes = random.randint(5, 50)
+            if self.chromosome_size == -1:
+                # arbitrary range of starting chromosome size
+                numgenes = random.randint(5, 50)
+            else:
+                numgenes = self.chromosome_size
             for bit in range(numgenes):
                 chromo.s += random.choice(self.genetic_alphabet)
             chromos.append(chromo)
@@ -192,14 +305,50 @@ class GeneticAlgorithm():
             chromos.append(self.mutate(Chromosome(seed)))
         return chromos
 
-    def run(self, max_iterations=1000, population_size=100, seed=None):
+    def run(self, max_iterations=1000,
+                  population_size=100,
+                  seed=None,
+                  fitness_threshold=None,
+                  max_fitness=None,
+                  logfile=None):
         """Run the genetic algorithm
 
-        max_iterations is the number of generations to run
-        population_size is the number of chromosomes per population
-        seed, if specified, will create the initial population
-        from an existing gene
+        max_iterations(int):
+            the number of generations to run
+            if set to None, will run until max_fitness is reached
+        population_size(int):
+            the number of chromosomes per population
+        seed(string):
+            if specified, will create the initial population
+            from an existing gene
+        fitness_threshold(float):
+            will discard anything with worse fitness than the
+            threshold (so as not to pass down genes)
+        max_fitness(float):
+            if set, will break if that fitness is reached
+        logfile(string):
+            If specified, data will be written to this file
+            for each generation.
         """
+
+        logging = True if logfile != None else False
+
+        if max_iterations == None and max_fitness == None:
+            print("ERROR: no max fitness set. Cannot run indefinitely.")
+            return
+
+        if logging:
+            outfile = open(logfile,"w+")
+            outfile.write("GA run params:\n")
+            outfile.write("\tmax_iterations: %d\n"%max_iterations)
+            outfile.write("\tpopulation_size: %d\n"%population_size)
+            outfile.write("\tseed: %r\n"%seed)
+            outfile.write("\tfitness_threshold: %r\n"%fitness_threshold)
+            outfile.write("\tmax_fitness: %r\n"%max_fitness)
+            outfile.write("\n")
+
+
+        start_time = time.time()
         def iterate_pop(pop):
             # iterate the current population
 
@@ -208,6 +357,20 @@ class GeneticAlgorithm():
             # elitism
             if self.use_elitism:  # use 5% of pop for elitism
                 newpop.extend(pop[:int(population_size / 20)])
+            if fitness_threshold is not None:
+                for chromo in pop:
+                    if self.positive_fitness and chromo.fitness < fitness_threshold:
+                        pop.remove(chromo)
+                    elif not self.positive_fitness and chromo.fitness > fitness_threshold:
+                        pop.remove(chromo)
+
+            if len(newpop) == 0:
+                logstr = "Population extinct. Stopping."
+                print(logstr)
+                if logging:
+                    outfile.write(logstr)
+                return
+
             while len(newpop) < population_size:
                 ch1 = self.selection_function(pop)
                 ch2 = self.selection_function(pop)
@@ -217,30 +380,54 @@ class GeneticAlgorithm():
                 newpop.append(ch2)
             return newpop
 
+        # initialize population
         if seed:
-            pop = self.generate_seeded_population(
-                population_size, seed)  # initialize population
+            pop = self.generate_seeded_population(population_size, seed)
         else:
-            pop = self.generate_population(
-                population_size)  # initialize population
+            pop = self.generate_population(population_size)
 
-        best = Chromosome()
-        for i in range(max_iterations):
-            # assign fitness values to all chromosomes
-            for chromosome in pop:
-                self.evaluate(chromosome)
+        try:
+            best = Chromosome()
+            for i in itertools.count():
+                i_start = time.time()
+                # assign fitness values to all chromosomes
+                for chromosome in pop:
+                    self.evaluate(chromosome)
+                avgf = sum([chromo.fitness for chromo in pop]) / len(pop)
+                # sort population by fitness
+                pop = sorted(pop, key=lambda x: x.fitness,
+                             reverse=self.positive_fitness)
+                best = pop[0]
 
-            avgf = sum([chromo.fitness for chromo in pop]) / len(pop)
-            # sort population by fitness
-            pop = sorted(pop, key=lambda x: x.fitness,
-                         reverse=self.positive_fitness)
-            best = pop[0]
-            print("Generation %d: Max fitness: %.5f Average Fitness: %.5f" %
-                  (i + 1, best.fitness, avgf))
+                if max_fitness != None:
+                    if self.positive_fitness and best.fitness >= max_fitness:
+                        break
+                    elif not self.positive_fitness and best.fitness <= max_fitness:
+                        break
 
-            # iterate the population
-            pop = iterate_pop(pop)
+                logstr = "Generation %d:\n\tTime: %.5fs\n\tMax fitness: %.5f\n\tAverage Fitness: %.5f"%(i + 1, time.time()-i_start, best.fitness, avgf)
+                print(logstr)
+                if logging:
+                    outfile.write(logstr)
 
-        # sort final population by fitness
-        print("Best result:\n chromosome: %s \n fitness: %.5f" %
-              (best.s, best.fitness))
+                # iterate the population
+                pop = iterate_pop(pop)
+
+                if max_iterations != None and i > max_iterations:
+                    break
+        finally:
+            # sort final population by fitness
+            logstr = "Generation %d:\n\tTotal Runtime: %.5fs\n\tBest result:\n\tchromosome: %s\n\tfitness: %.5f"%(i + 1, time.time() - start_time, best.s, best.fitness)
+            print(logstr)
+            if logging:
+                outfile.write(logstr)
+
+            output_string = ''
+            try:
+                output_string = cbrainfuck.evaluate(best.s,1)
+            finally:
+                if output_string == '':
+                    print('Output did not produce a string.')
+                else:
+                    print(("Output of best result, (first 100 chars):%s" % output_string[:100]))
+
