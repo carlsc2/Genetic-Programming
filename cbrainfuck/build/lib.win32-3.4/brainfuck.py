@@ -104,10 +104,10 @@ def main(argv):
             sys.exit()
         elif opt in ("-i", "--ifile"):
             inputfile = arg
-            print(('Input file is %s' % inputfile))
+            print(('Input file is %s' % inputfile)
         elif opt in ("-o", "--ofile"):
             outputfile = arg
-            print(('Output file is %s' % outputfile))
+            print('Output file is %s' % outputfile)
         elif opt == '-s':
             input_code = arg
 
