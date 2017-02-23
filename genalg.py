@@ -6,7 +6,6 @@ Contains functionality for multi-purpose genetic algorithm.
 """
 
 import random
-import cbrainfuck
 import time
 import itertools
 
@@ -31,8 +30,8 @@ class GeneticAlgorithm():
                  eval_func,
                  use_elitism=False,
                  positive_fitness=True,
-                 selection_function="roulette",
-                 crossover_function="one_point",
+                 selection_function="tournament_8",
+                 crossover_function="uniform",
                  chromosome_size=-1):
         """
         genetic_alphabet (list<string>):
@@ -75,7 +74,7 @@ class GeneticAlgorithm():
                                delimited_x to specify x as delimiter.
 
         chromosome_size (int):
-            If set to -1, chromosomes can change in size
+            If set to None, chromosomes can change in size
             via mutation.
             Otherwise, the chromosomes will be limited to
             this size and will only be mutated via substitution.
@@ -209,7 +208,7 @@ class GeneticAlgorithm():
     def delimited_crossover(self, ch1, ch2, delimiter="#"):
         """Partition the chromosomes and swap their partitions based on delimiter
 
-        The chromosomes can be different sizes; it is ratio based,
+        The chromosomes can be different sizes; it just alternates swap sections
 
         """
 
@@ -219,17 +218,72 @@ class GeneticAlgorithm():
         o1 = ""
         o2 = ""
 
-        for i in range(min(len(p1),len(p2))):
-            if i&1:
-                o1 += p1[i]
-                o2 += p2[i]
-            else:
-                o1 += p2[i]
-                o2 += p1[i]
+        if len(p1) > len(p2):
+            for i in range(len(p2)):
+                if i&1:
+                    o1 += p1[i]
+                    o2 += p2[i]
+                else:
+                    o1 += p2[i]
+                    o2 += p1[i]
+            o1 += p1[i+1]
+        elif len(p1) < len(p2):
+            for i in range(len(p1)):
+                if i&1:
+                    o1 += p1[i]
+                    o2 += p2[i]
+                else:
+                    o1 += p2[i]
+                    o2 += p1[i]
+            o2 += p2[i+1]
+        else:
+            for i in range(len(p1)):
+                if i&1:
+                    o1 += p1[i]
+                    o2 += p2[i]
+                else:
+                    o1 += p2[i]
+                    o2 += p1[i]
 
         return Chromosome(o1),Chromosome(o2)
 
+    def delimited_crossover_v2(ch1, ch2, delimiter="#"):
+        """Partition the chromosomes and swap their partitions based on delimiter
 
+        Uses ratio-based delimiters from one chromosome chosen at random to swap with the other
+        """
+
+        ch1 = ch1.s
+        ch2 = ch2.s
+        len1 = len(ch1)
+        len2 = len(ch2)
+
+        o1 = ""
+        o2 = ""
+        if random.getrandbits(1):
+            crosspoints = [pos/len1 for pos, char in enumerate(ch1) if char == delimiter]   
+        else:
+            crosspoints = [pos/len2 for pos, char in enumerate(ch2) if char == delimiter]
+
+        prev1 = prev2 = i = 0
+        for i,x in enumerate(crosspoints):
+            tmp1 = int(len1*x)
+            tmp2 = int(len2*x)
+            if i&1:
+                o1 += ch1[prev1:tmp1]
+                o2 += ch2[prev2:tmp2]
+            else:
+                o1 += ch2[prev2:tmp2]
+                o2 += ch1[prev1:tmp1]
+            prev1 = tmp1
+            prev2 = tmp2
+        if (i+1)&1:
+            o1 += ch1[prev1:]
+            o2 += ch2[prev2:]
+        else:
+            o1 += ch2[prev2:]
+            o2 += ch1[prev1:]
+        return Chromosome(o1), Chromosome(o2)
 
     def roulette_selection(self, population):
         """Roulette wheel sampling
@@ -289,7 +343,7 @@ class GeneticAlgorithm():
         chromos = []
         for eachChromo in range(popSize):
             chromo = Chromosome()
-            if self.chromosome_size == -1:
+            if self.chromosome_size == None:
                 # arbitrary range of starting chromosome size
                 numgenes = random.randint(5, 50)
             else:
@@ -314,6 +368,8 @@ class GeneticAlgorithm():
                   logfile=None):
         """Run the genetic algorithm
 
+        parameters:
+
         max_iterations(int):
             the number of generations to run
             if set to None, will run until max_fitness is reached
@@ -330,6 +386,11 @@ class GeneticAlgorithm():
         logfile(string):
             If specified, data will be written to this file
             for each generation.
+
+        return:
+
+            This function returns the highest fitness chromosome of the
+            final generation.
         """
 
         logging = True if logfile != None else False
@@ -353,11 +414,7 @@ class GeneticAlgorithm():
         def iterate_pop(pop):
             # iterate the current population
 
-            newpop = []
 
-            # elitism
-            if self.use_elitism:  # use 5% of pop for elitism
-                newpop.extend(pop[:int(population_size / 20)])
             if fitness_threshold is not None:
                 for chromo in pop:
                     if self.positive_fitness and chromo.fitness < fitness_threshold:
@@ -365,12 +422,18 @@ class GeneticAlgorithm():
                     elif not self.positive_fitness and chromo.fitness > fitness_threshold:
                         pop.remove(chromo)
 
-            if len(newpop) == 0:
+            if len(pop) == 0:
                 logstr = "Population extinct. Stopping."
                 print(logstr)
                 if logging:
                     outfile.write(logstr)
                 return
+
+            newpop = []
+
+            # elitism
+            if self.use_elitism:  # use 5% of pop for elitism
+                newpop.extend(pop[:int(population_size / 20)])
 
             while len(newpop) < population_size:
                 ch1 = self.selection_function(pop)
@@ -389,6 +452,11 @@ class GeneticAlgorithm():
 
         try:
             best = Chromosome()
+            prevbest = None
+            improvement = 0
+            windowsize = 15 #num generations to consider
+            avgimplist = [0]*windowsize
+
             for i in itertools.count():
                 i_start = time.time()
                 # assign fitness values to all chromosomes
@@ -400,6 +468,16 @@ class GeneticAlgorithm():
                              reverse=self.positive_fitness)
                 best = pop[0]
 
+                if not prevbest:
+                    prevbest = best.fitness
+                else:
+                    if self.positive_fitness:
+                        improvement = best.fitness - prevbest
+                    else:
+                        improvement = prevbest - best.fitness
+                    prevbest = best.fitness
+                avgimplist[i%10] = improvement
+
                 if max_fitness != None:
                     if self.positive_fitness and best.fitness >= max_fitness:
                         break
@@ -408,6 +486,16 @@ class GeneticAlgorithm():
 
                 logstr = "Generation %d:\n\tTime: %.5fs\n\tMax fitness: %.5f\n\tAverage Fitness: %.5f"%(i + 1, time.time()-i_start, best.fitness, avgf)
                 print(logstr)
+                print("improvement: %.5f"%improvement)
+                avgimp = sum(avgimplist)/windowsize
+                print("avg improvement: %.5f"%(avgimp))
+                print("mutation rate: %.5f"%self.mutation_rate)
+                if avgimp == 0 and self.mutation_rate < .05:
+                    self.mutation_rate += 0.001
+                else:
+                    self.mutation_rate -= 0.001
+
+
                 if logging:
                     outfile.write(logstr)
 
@@ -416,19 +504,16 @@ class GeneticAlgorithm():
 
                 if max_iterations != None and i > max_iterations:
                     break
+        except Exception as e:
+            print("Exception occurred: %r"%e)
+        except KeyboardInterrupt:
+            print("Interrupted: halting execution")
         finally:
             # sort final population by fitness
-            logstr = "Generation %d:\n\tTotal Runtime: %.5fs\n\tBest result:\n\tchromosome: %s\n\tfitness: %.5f"%(i + 1, time.time() - start_time, best.s, best.fitness)
+            logstr = "Generation %d:\n\tTotal Runtime: %.5fs\n\tBest result:\n\tchromosome: %s\n\tfitness: %.5f"%(i + 1, time.time() - start_time, repr(best.s), best.fitness)
             print(logstr)
             if logging:
                 outfile.write(logstr)
 
-            output_string = ''
-            try:
-                output_string = cbrainfuck.evaluate(best.s,1)
-            finally:
-                if output_string == '':
-                    print('Output did not produce a string.')
-                else:
-                    print("Output of best result, (first 100 chars):%s" % output_string[:100])
+            return best.s
 
