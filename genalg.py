@@ -121,6 +121,12 @@ class GeneticAlgorithm():
                 self.crossover_function = lambda ch1,ch2: self.delimited_crossover(ch1,ch2,tmp[-1])
             else:
                 self.crossover_function = self.delimited_crossover
+        elif 'delimited2' in crossover_function:
+            tmp = crossover_function.split("_")
+            if len(tmp) == 2:
+                self.crossover_function = lambda ch1,ch2: self.delimited_crossover_v2(ch1,ch2,tmp[-1])
+            else:
+                self.crossover_function = self.delimited_crossover_v2
 
     def mutate(self, chromo):
         """mutate a chromosome and return a new, mutated one
